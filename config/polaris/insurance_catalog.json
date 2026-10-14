@@ -1,0 +1,1 @@
+﻿{"catalog":{"name":"insurance-dlh-rest","type":"INTERNAL","readOnly":false,"properties":{"default-base-location":"s3://insurance-dlh-rest/warehouse/"},"storageConfigInfo":{"storageType":"S3","allowedLocations":["s3://insurance-dlh-rest/warehouse/"],"endpoint":"http://minio:9000","endpointInternal":"http://minio:9000","pathStyleAccess":true,"region":"us-east-1"}}}

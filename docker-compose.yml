@@ -1,0 +1,319 @@
+services:
+
+  # ============================================================
+  # CATALOG / METASTORE
+  # ============================================================
+ 
+  # Base de datos para los metadatos de Hive
+  mariadb:
+    image: ${MARIADB_IMAGE}
+    container_name: mariadb
+    networks:
+      - ${NETWORK_DATABASE}
+    environment:
+      MARIADB_ROOT_PASSWORD: ${MARIADB_ROOT_PASSWORD}
+    ports:
+      - "127.0.0.1:${MARIADB_PORT}:3306"
+    volumes:
+      - mariadb_data:/var/lib/mysql
+    healthcheck:
+      test: ["CMD", "healthcheck.sh", "--connect", "--innodb_initialized"]
+      interval: 10s
+      timeout: 5s      
+      retries: 10
+      start_period: 20s
+  
+  # Base de datos para los metadatos de Polaris
+  postgres:
+    image: ${POSTGRES_IMAGE}
+    container_name: postgres
+    networks:
+      - ${NETWORK_DATABASE}
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB}
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+    ports:
+      - "127.0.0.1:${POSTGRES_PORT}:5432"  
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD", "pg_isready", "-U", "${POSTGRES_USER}", "-d", "${POSTGRES_DB}"]
+      interval: 10s
+      timeout: 5s      
+      retries: 10
+      start_period: 20s
+
+  # ============================================================
+  # DATA / OBJECT STORAGE
+  # ============================================================
+  
+  minio:
+    image: ${MINIO_IMAGE}
+    container_name: minio
+    networks:
+      - ${NETWORK_STORAGE}
+    environment:
+      MINIO_ROOT_USER: ${MINIO_ROOT_USER}
+      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD}
+    ports:
+      - "127.0.0.1:${MINIO_API_PORT}:9000"
+      - "127.0.0.1:${MINIO_CONSOLE_PORT}:9001"
+    volumes:
+      - minio_data:/data
+    command: server /data --console-address ":9001"
+    healthcheck:
+      test: ["CMD", "mc", "ready", "local"]
+      interval: 10s
+      timeout: 5s      
+      retries: 10
+      start_period: 15s
+
+  # ============================================================
+  # PROCESSING / SQL ENGINE
+  # ============================================================
+  
+  trino:
+    image: ${TRINO_IMAGE}
+    container_name: trino
+    networks:
+      - ${NETWORK_CATALOG}
+      - ${NETWORK_STORAGE}
+    environment:
+      POLARIS_INSURANCE_TRINO_CREDENTIAL: ${POLARIS_INSURANCE_TRINO_CREDENTIAL}
+      POLARIS_RETAIL_TRINO_CREDENTIAL: ${POLARIS_RETAIL_TRINO_CREDENTIAL}
+      AWS_REGION: ${POLARIS_S3_REGION}
+      AWS_ACCESS_KEY_ID: ${MINIO_ROOT_USER}
+      AWS_SECRET_ACCESS_KEY: ${MINIO_ROOT_PASSWORD}
+    ports:
+      - "127.0.0.1:${TRINO_PORT}:8080"
+    volumes:
+      - ./config/trino/catalog:/etc/trino/catalog:ro
+    depends_on:
+      polaris:
+        condition: service_started
+      hive-iceberg:
+        condition: service_started
+      hive-delta:
+        condition: service_started
+      minio:
+        condition: service_started
+
+  # ============================================================
+  # PROCESSING / HIVE SERVICES
+  # ============================================================
+  
+  # Servicio Hive para tecnologia Iceberg 
+  hive-iceberg:
+    image: ${HIVE_IMAGE}
+    build:
+      context: .
+      dockerfile: docker/hive/Dockerfile
+    container_name: hive-iceberg
+    networks:
+      - ${NETWORK_CATALOG}
+      - ${NETWORK_STORAGE}
+      - ${NETWORK_DATABASE}
+    environment:
+      SERVICE_NAME: metastore
+      DB_DRIVER: mysql      
+      AWS_ACCESS_KEY_ID: ${MINIO_ROOT_USER}
+      AWS_SECRET_ACCESS_KEY: ${MINIO_ROOT_PASSWORD}
+      HADOOP_CLASSPATH: >-
+        /opt/hadoop/share/hadoop/tools/lib/*
+      SERVICE_OPTS: >-
+        -Djavax.jdo.option.ConnectionDriverName=org.mariadb.jdbc.Driver
+        -Djavax.jdo.option.ConnectionURL=jdbc:mariadb://mariadb:3306/${HIVE_ICEBERG_DB_NAME}?createDatabaseIfNotExist=false&useSSL=false
+        -Djavax.jdo.option.ConnectionUserName=${HIVE_ICEBERG_DB_USER}
+        -Djavax.jdo.option.ConnectionPassword=${HIVE_ICEBERG_DB_PASSWORD}
+      HIVE_CUSTOM_CONF_DIR: /hive_custom_conf
+    ports:
+      - "127.0.0.1:${HIVE_ICEBERG_PORT}:9083"
+    volumes:
+      - ./config/hive_iceberg:/hive_custom_conf:ro
+    depends_on:
+      mariadb:
+        condition: service_healthy
+      minio:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "bash -c '</dev/tcp/127.0.0.1/9083'"]
+      interval: 10s
+      timeout: 5s
+      retries: 20
+      start_period: 30s
+      
+  # Servicio Hive para tecnologia Delta
+  hive-delta:
+    image: ${HIVE_IMAGE}
+    build:
+      context: .
+      dockerfile: docker/hive/Dockerfile
+    container_name: hive-delta
+    networks:
+      - ${NETWORK_CATALOG}
+      - ${NETWORK_STORAGE}
+      - ${NETWORK_DATABASE}
+    environment:
+      SERVICE_NAME: metastore
+      DB_DRIVER: mysql      
+      AWS_ACCESS_KEY_ID: ${MINIO_ROOT_USER}
+      AWS_SECRET_ACCESS_KEY: ${MINIO_ROOT_PASSWORD}
+      HADOOP_CLASSPATH: >-
+        /opt/hadoop/share/hadoop/tools/lib/*
+      SERVICE_OPTS: >-
+        -Djavax.jdo.option.ConnectionDriverName=org.mariadb.jdbc.Driver
+        -Djavax.jdo.option.ConnectionURL=jdbc:mariadb://mariadb:3306/${HIVE_DELTA_DB_NAME}?createDatabaseIfNotExist=false&useSSL=false
+        -Djavax.jdo.option.ConnectionUserName=${HIVE_DELTA_DB_USER}
+        -Djavax.jdo.option.ConnectionPassword=${HIVE_DELTA_DB_PASSWORD}
+      HIVE_CUSTOM_CONF_DIR: /hive_custom_conf
+    ports:
+      - "127.0.0.1:${HIVE_DELTA_PORT}:9083"
+    volumes:
+      - ./config/hive_delta:/hive_custom_conf:ro
+    depends_on:
+      mariadb:
+        condition: service_healthy
+      minio:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "bash -c '</dev/tcp/127.0.0.1/9083'"]
+      interval: 10s
+      timeout: 5s
+      retries: 20
+      start_period: 30s
+        
+  # ============================================================
+  # PROCESSING / POLARIS SERVICE
+  # ============================================================
+  
+  polaris:
+    image: ${POLARIS_IMAGE}
+    container_name: polaris
+    networks:
+      - ${NETWORK_DATABASE}
+      - ${NETWORK_STORAGE}
+      - ${NETWORK_CATALOG}
+    environment:
+      POLARIS_PERSISTENCE_TYPE: relational-jdbc
+      QUARKUS_DATASOURCE_JDBC_URL: jdbc:postgresql://postgres:${POSTGRES_PORT}/${POSTGRES_DB}
+      QUARKUS_DATASOURCE_USERNAME: ${POSTGRES_USER}
+      QUARKUS_DATASOURCE_PASSWORD: ${POSTGRES_PASSWORD}
+      POLARIS_STORAGE_AWS_ACCESS_KEY: ${MINIO_ROOT_USER}
+      POLARIS_STORAGE_AWS_SECRET_KEY: ${MINIO_ROOT_PASSWORD}
+      QUARKUS_LOG_CONSOLE_LEVEL: ERROR
+      QUARKUS_LOG_CATEGORY__ORG_APACHE_POLARIS__LEVEL: ERROR
+      AWS_REGION: ${POLARIS_S3_REGION}
+    ports:
+      - "127.0.0.1:${POLARIS_PORT}:8181" # API REST del catálogo
+      - "127.0.0.1:${POLARIS_MANAGEMENT_PORT}:8182" # métricas / health
+    depends_on:
+      polaris-bootstrap:
+        condition: service_completed_successfully
+        
+  polaris-bootstrap:
+    image: ${POLARIS_ADMIN_IMAGE}
+    container_name: polaris-bootstrap
+    networks:
+      - ${NETWORK_DATABASE}
+    environment:
+      POLARIS_PERSISTENCE_TYPE: relational-jdbc
+      QUARKUS_DATASOURCE_JDBC_URL: jdbc:postgresql://postgres:${POSTGRES_PORT}/${POSTGRES_DB}
+      QUARKUS_DATASOURCE_USERNAME: ${POSTGRES_USER}
+      QUARKUS_DATASOURCE_PASSWORD: ${POSTGRES_PASSWORD}
+    depends_on:
+      postgres:
+        condition: service_started
+    command:
+      - bootstrap
+      - -r
+      - ${POLARIS_REALM}
+      - -c
+      - ${POLARIS_REALM},${POLARIS_CLIENT_ID},${POLARIS_CLIENT_SECRET}
+    restart: "no"
+        
+  # ============================================================
+  # PROCESSING / TRANSFORMATION SERVICE
+  # ============================================================
+  
+  spark:
+    image: ${SPARK_IMAGE}
+    build:
+      context: .
+      dockerfile: docker/spark/Dockerfile
+    container_name: spark
+    networks:
+      - ${NETWORK_SPARK_DEV}
+      - ${NETWORK_STORAGE}
+      - ${NETWORK_CATALOG}
+    environment:
+      AWS_ACCESS_KEY_ID: ${MINIO_ROOT_USER}
+      AWS_SECRET_ACCESS_KEY: ${MINIO_ROOT_PASSWORD}
+      POLARIS_CLIENT_INSURANCE_ID_OAUTH2: ${POLARIS_CLIENT_INSURANCE_ID_OAUTH2}
+      POLARIS_CLIENT_INSURANCE_SECRET_OAUTH2: ${POLARIS_CLIENT_INSURANCE_SECRET_OAUTH2}
+      POLARIS_CLIENT_RETAIL_ID_OAUTH2: ${POLARIS_CLIENT_RETAIL_ID_OAUTH2}
+      POLARIS_CLIENT_RETAIL_SECRET_OAUTH2: ${POLARIS_CLIENT_RETAIL_SECRET_OAUTH2}
+      PYSPARK_PYTHON: /usr/local/bin/python
+      PYSPARK_DRIVER_PYTHON: /usr/local/bin/python
+      PYTHONPATH: /workspace/code/common:/opt/spark/python:/opt/spark/python/lib/pyspark.zip:/opt/spark/python/lib/py4j-${PY4J_VERSION}-src.zip
+    volumes:
+      - .:/workspace 
+      - ./config/spark/log4j2.properties:/opt/spark/conf/log4j2.properties:ro
+      - ./config/spark/spark-defaults.conf:/opt/spark/conf/spark-defaults.conf:ro
+    depends_on:
+      minio:
+        condition: service_healthy
+      mariadb:
+        condition: service_healthy
+      postgres:
+        condition: service_healthy
+      hive-iceberg:
+        condition: service_started
+      hive-delta:
+        condition: service_started
+      polaris:
+        condition: service_started
+      trino:
+        condition: service_started
+    user: spark
+    working_dir: /workspace 
+    stdin_open: true
+    tty: true
+    command:
+      - sleep
+      - infinity
+  
+# ==============================================================
+# NETWORKS
+# ==============================================================
+  
+networks:
+ 
+  spark_dev:
+    name: ${NETWORK_SPARK_DEV}
+    driver: bridge
+    
+  catalog_net:
+    name: ${NETWORK_CATALOG}
+    driver: bridge
+    
+  storage_net:
+    name: ${NETWORK_STORAGE}
+    driver: bridge
+    
+  database_net:
+    name: ${NETWORK_DATABASE}
+    driver: bridge
+  
+# ==============================================================
+# VOLUMES
+# ==============================================================
+  
+volumes:
+ 
+  minio_data:
+    name: minio_data
+  mariadb_data:
+    name: mariadb_data
+  postgres_data:
+    name: postgres_data

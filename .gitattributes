@@ -1,0 +1,24 @@
+# Forzar a Git a manejar de forma automática los finales de línea
+* text=auto
+
+# Asegurar que los archivos de código y notebooks de Python usen LF (estándar de Linux)
+*.py text eol=lf
+*.ipynb text eol=lf
+
+# Asegurar que archivos de texto y documentación usen LF
+*.md text eol=lf
+*.txt text eol=lf
+*.yml text eol=lf
+*.yaml text eol=lf
+*.json text eol=lf
+*.xml text eol=lf
+*.properties text eol=lf
+*.sql text eol=lf
+.gitignore text eol=lf
+.gitattributes text eol=lf
+Dockerfile text eol=lf
+
+# Denotar que los archivos de datos e imágenes son binarios (Git no debe tocar sus líneas)
+*.png binary
+*.jpg binary
+*.jpeg binary

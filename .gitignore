@@ -1,0 +1,28 @@
+# Datos y archivos locales
+*_data/
+
+# Sistema operativo
+Thumbs.db
+.DS_Store
+
+# Dependencias Java empaquetadas
+*.jar
+
+# Variables de entorno y secretos
+.env
+.env.*
+!.env.example
+
+# Jupyter Notebooks: temporales y respaldos
+.ipynb_checkpoints/
+*/.ipynb_checkpoints/
+test.*
+
+# Cache de Python
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Entornos virtuales
+.venv/
+venv/

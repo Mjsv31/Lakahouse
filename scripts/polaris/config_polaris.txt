@@ -1,0 +1,26 @@
+Configuracion de Polaris
+-obtener el token de root
+curl.exe -X POST "http://127.0.0.1:8181/api/catalog/v1/oauth/tokens" -u "root:secrete" -H "Content-Type: application/x-www-form-urlencoded" -d "grant_type=client_credentials" -d "scope=PRINCIPAL_ROLE:ALL"
+-comprobar que el token funciona
+curl.exe -X GET "http://127.0.0.1:8181/api/management/v1/catalogs" -H "Authorization: Bearer TU_TOKEN"
+-Crear el catálogo
+curl.exe -X POST "http://127.0.0.1:8181/api/management/v1/catalogs" -H "Authorization: Bearer TU_TOKEN" -H "Content-Type: application/json" --data-binary "@config\polaris\insurance_catalog.json"
+curl.exe -X POST "http://127.0.0.1:8181/api/management/v1/catalogs" -H "Authorization: Bearer TU_TOKEN" -H "Content-Type: application/json" --data-binary "@config\polaris\retail_catalog.json"
+-Crear spark_role
+curl.exe -X POST "http://127.0.0.1:8181/api/management/v1/principal-roles" -H "Authorization: Bearer TU_TOKEN" -H "Content-Type: application/json" --data-binary "@config\polaris\insurance_spark_role.json"
+curl.exe -X POST "http://127.0.0.1:8181/api/management/v1/principal-roles" -H "Authorization: Bearer TU_TOKEN" -H "Content-Type: application/json" --data-binary "@config\polaris\retail_spark_role.json"
+-Crear spark_catalog_role
+curl.exe -X POST "http://127.0.0.1:8181/api/management/v1/catalogs/insurance-dlh-rest/catalog-roles" -H "Authorization: Bearer TU_TOKEN" -H "Content-Type: application/json" --data-binary "@config\polaris\insurance_catalog_role.json"
+curl.exe -X POST "http://127.0.0.1:8181/api/management/v1/catalogs/retail-dlh-rest/catalog-roles" -H "Authorization: Bearer TU_TOKEN" -H "Content-Type: application/json" --data-binary "@config\polaris\retail_catalog_role.json"
+-Asignar spark_catalog_role a spark_role
+curl.exe -i -X PUT "http://127.0.0.1:8181/api/management/v1/principal-roles/insurance_spark_role/catalog-roles/insurance-dlh-rest" -H "Authorization: Bearer TU_TOKEN" -H "Content-Type: application/json" --data-binary "@config\polaris\insurance_assign_catalog_role.json"
+curl.exe -i -X PUT "http://127.0.0.1:8181/api/management/v1/principal-roles/retail_spark_role/catalog-roles/retail-dlh-rest" -H "Authorization: Bearer TU_TOKEN" -H "Content-Type: application/json" --data-binary "@config\polaris\retail_assign_catalog_role.json"
+-Permiso CATALOG_MANAGE_CONTENT
+curl.exe -i -X PUT "http://127.0.0.1:8181/api/management/v1/catalogs/insurance-dlh-rest/catalog-roles/insurance_catalog_role/grants" -H "Authorization: Bearer TU_TOKEN" -H "Content-Type: application/json" --data-binary "{\"grant\":{\"type\":\"catalog\",\"privilege\":\"CATALOG_MANAGE_CONTENT\"}}"
+curl.exe -i -X PUT "http://127.0.0.1:8181/api/management/v1/catalogs/retail-dlh-rest/catalog-roles/retail_catalog_role/grants" -H "Authorization: Bearer TU_TOKEN" -H "Content-Type: application/json" --data-binary "{\"grant\":{\"type\":\"catalog\",\"privilege\":\"CATALOG_MANAGE_CONTENT\"}}"
+- Crear spark_client
+curl.exe -i -X POST "http://127.0.0.1:8181/api/management/v1/principals" -H "Authorization: Bearer TU_TOKEN" -H "Polaris-Realm: POLARIS" -H "Content-Type: application/json" --data-binary "@config\polaris\insurance_spark_principal.json"
+curl.exe -i -X POST "http://127.0.0.1:8181/api/management/v1/principals" -H "Authorization: Bearer TU_TOKEN" -H "Polaris-Realm: POLARIS" -H "Content-Type: application/json" --data-binary "@config\polaris\retail_spark_principal.json"
+-Asignar spark_role al principal spark_client
+curl.exe -i -X PUT "http://127.0.0.1:8181/api/management/v1/principals/insurance_spark/principal-roles" -H "Authorization: Bearer TU_TOKEN" -H "Polaris-Realm: POLARIS" -H "Content-Type: application/json" --data-binary "@config\polaris\insurance_assign_spark_role.json"
+curl.exe -i -X PUT "http://127.0.0.1:8181/api/management/v1/principals/retail_spark/principal-roles" -H "Authorization: Bearer TU_TOKEN" -H "Polaris-Realm: POLARIS" -H "Content-Type: application/json" --data-binary "@config\polaris\retail_assign_spark_role.json"
