@@ -255,7 +255,7 @@ services:
       POLARIS_CLIENT_RETAIL_SECRET_OAUTH2: ${POLARIS_CLIENT_RETAIL_SECRET_OAUTH2}
       PYSPARK_PYTHON: /usr/local/bin/python
       PYSPARK_DRIVER_PYTHON: /usr/local/bin/python
-      PYTHONPATH: /workspace/code/common:/opt/spark/python:/opt/spark/python/lib/pyspark.zip:/opt/spark/python/lib/py4j-${PY4J_VERSION}-src.zip
+      PYTHONPATH: /workspace/code/projects/common:/opt/spark/python:/opt/spark/python/lib/pyspark.zip:/opt/spark/python/lib/py4j-${PY4J_VERSION}-src.zip
     volumes:
       - .:/workspace 
       - ./config/spark/log4j2.properties:/opt/spark/conf/log4j2.properties:ro
